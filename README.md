@@ -149,49 +149,67 @@ Não é necessário executar `npm start` antes dos E2E. A configuração usa `ht
 
 Esses números registram a versão verificada; a saída dos comandos mostra o resultado da execução no ambiente do avaliador.
 
-## Integração contínua — GitHub Actions
+## CI/CD — GitHub Actions e publicação da imagem
 
-O workflow [CI](.github/workflows/ci.yml) roda em pushes, pull requests e execução manual. Todos os comandos usam a raiz do repositório, sem `working-directory` adicional.
+O projeto está preparado para compilar e rodar como um contêiner Linux em um servidor com Docker. A pipeline automatiza as verificações e, quando elas passam em um push para `master`, publica a imagem no GitHub Container Registry (GHCR). O deploy no servidor é feito com Docker Compose: o workflow não acessa nem altera um servidor externo.
 
-| Job                    | Verificação                                                                                                       |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `Quality`              | Instalação com `npm ci`, Conventional Commits, formatação, testes com cobertura mínima de 65% e build de produção |
-| `Browser tests`        | Instala Chromium e dependências de sistema e executa os E2E de desktop e celular                                  |
-| `Container smoke test` | Após os outros jobs passarem, constrói a imagem Docker e verifica HTTP, health check e fallback da aplicação      |
+### Fluxo da pipeline
 
-O pipeline usa Node conforme `.nvmrc`, cache de downloads npm, permissões de leitura e cancelamento de execuções antigas da mesma branch/PR. Relatórios de cobertura, resultados do Playwright e build ficam disponíveis como artifacts por sete dias. O Dependabot propõe atualizações de npm, Actions e imagens Docker.
+1. **Pull request ou push:** o workflow [CI](.github/workflows/ci.yml) instala dependências com `npm ci`, verifica Conventional Commits e formatação, executa testes unitários com cobertura e testes de navegador, e compila a aplicação.
+2. **Verificação do contêiner:** depois de `Quality` e `Browser tests` passarem, o job `Container smoke test` constrói a imagem e verifica `/health`, a página inicial e o fallback de rotas do Angular.
+3. **Publicação após CI aprovado:** em push para `master`, o workflow [Publish container](.github/workflows/publish-container.yml) aguarda o CI concluir com sucesso, então constrói e envia a imagem para `ghcr.io/natanpython/test_front-end`.
 
-No CI, o Chromium é instalado explicitamente; não depende do Edge da máquina do avaliador. Essa configuração segue a [orientação de CI do Playwright](https://playwright.dev/docs/ci).
+| Imagem publicada | Uso |
+| --- | --- |
+| `ghcr.io/natanpython/test_front-end:latest` | versão mais recente aprovada em `master` |
+| `ghcr.io/natanpython/test_front-end:sha-<commit>` | versão identificada pelo commit, recomendada para deploy reproduzível |
 
-Esta estrutura implementa CI e disponibiliza o build como artefato. **Não há deploy automático nem publicação de imagem em registry**: não foi definido um ambiente de hospedagem. Acompanhe as execuções na [aba Actions](https://github.com/Natanpython/Test_Front-End/actions).
+A pipeline também roda manualmente para validação, mas a publicação é exclusiva de pushes aprovados em `master`. Ela usa o `GITHUB_TOKEN` com permissões mínimas, sem armazenar senha de registry no repositório. Artefatos de cobertura, Playwright e build ficam disponíveis por sete dias. O Dependabot acompanha dependências npm, Actions e imagens Docker. Acompanhe as execuções na [aba Actions](https://github.com/Natanpython/Test_Front-End/actions).
 
-## Padrão de commits e contribuição
+O pacote GHCR pode ficar privado inicialmente. Para que um servidor baixe a imagem sem credenciais, ajuste a visibilidade do pacote para pública na página **Packages** do GitHub. Se o pacote permanecer privado, autentique o servidor no GHCR com um token de leitura de pacotes; não coloque esse token no `.env` nem no repositório.
 
-Use Conventional Commits, por exemplo `fix(form): valida pontuação do telefone` ou `ci(actions): adiciona pipeline de qualidade`. O Commitlint verifica os commits novos e o título nos PRs; em pushes, verifica o último commit. Consulte [CONTRIBUTING.md](CONTRIBUTING.md) para comandos, fluxo de contribuição e instruções de proteção da branch.
+### Commits e proteção da branch
+
+Use Conventional Commits, por exemplo `fix(form): valida pontuação do telefone` ou `ci(actions): adiciona pipeline de qualidade`. O Commitlint verifica commits novos e títulos de PR; em pushes, verifica o último commit. Consulte [CONTRIBUTING.md](CONTRIBUTING.md) para comandos e fluxo de contribuição. Para conferir localmente, execute `npm run format:check` e `npm run commitlint -- --last --verbose`.
+
+O primeiro commit histórico precede a adoção dessa convenção; os commits novos devem seguir o padrão.
+
+A proteção de `master` com checks obrigatórios precisa ser ativada nas configurações do GitHub. Depois de uma execução bem-sucedida, configure as regras da branch para exigir os jobs `Quality`, `Browser tests` e `Container smoke test` antes do merge. Os arquivos do workflow, sozinhos, não ativam essa proteção.
+
+## Docker, Nginx e hospedagem
+
+### O que está preparado
+
+O [Dockerfile](Dockerfile) faz build em múltiplos estágios: Node compila o Angular e a imagem final usa Nginx sem privilégios de root, servindo apenas os arquivos de produção na porta `8080`. A configuração [docker/default.conf](docker/default.conf) atende rotas da SPA com fallback para `index.html` e expõe `/health`, usado pelo Docker, Compose e CI. Não é necessário instalar Node no servidor.
+
+O contêiner serve apenas o frontend. Os usuários de demonstração continuam em memória no navegador; não há backend, persistência, autenticação ou envio de SMS. Para desenvolvimento com recarga automática, continue usando `npm start`.
+
+### Executar localmente com Docker Compose
+
+É necessário ter Docker Engine ou Docker Desktop ativo, com suporte a contêineres Linux. Na raiz do repositório, copie o exemplo de configuração e suba o build local:
 
 ```bash
-npm run format:check
-npm run commitlint -- --last --verbose
+cp .env.example .env
+docker compose up --build
 ```
 
-O primeiro commit histórico precede a adoção dessa convenção. A proteção de `master` com checks obrigatórios depende de configuração administrativa no GitHub; não é ativada apenas pelos arquivos do pipeline.
+No PowerShell, o comando de cópia equivalente é `Copy-Item .env.example .env`. Acesse http://localhost:8080; `HOST_PORT` no `.env` permite escolher outra porta disponível. Encerre com `docker compose down`. Esse fluxo compila a imagem a partir do código local.
 
-## Docker — execução opcional de produção
+### Executar a imagem em um servidor
 
-Docker permite avaliar o build de produção sem instalar Node no computador. É necessário ter Docker Engine ou Docker Desktop ativo, com suporte a contêineres Linux.
-
-Na raiz do repositório:
+O servidor precisa ter Docker Engine e o plugin Docker Compose instalados, além de uma porta liberada no firewall. Depois de um push aprovado em `master`, prepare a configuração e inicie a imagem publicada:
 
 ```bash
-docker build -t usuarios-app:local .
-docker run --rm --name usuarios-app -p 8080:8080 usuarios-app:local
+cp .env.example .env
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-Acesse http://localhost:8080. Para parar, use `Ctrl+C` no terminal do contêiner ou `docker stop usuarios-app` em outro terminal.
+O Compose de produção usa `IMAGE_NAME` e `HOST_PORT` do `.env`. A configuração de exemplo aponta para a tag `latest`; para fixar uma versão exata, altere `IMAGE_NAME` para `ghcr.io/natanpython/test_front-end:sha-<commit>`. Se o pacote for privado, faça login no GHCR no servidor antes do `pull`, usando um token com permissão de leitura de pacotes.
 
-O [Dockerfile](Dockerfile) usa dois estágios: Node compila o Angular e Nginx sem privilégios de root serve apenas os arquivos gerados na porta 8080. O servidor inclui `/health` e fallback para `index.html`. Esse uso de estágios separa as ferramentas de compilação da imagem final, conforme a [documentação Docker](https://docs.docker.com/build/building/multi-stage/).
+Para atualizar, faça `pull` e depois `up -d` novamente. Consulte os logs com `docker compose -f docker-compose.prod.yml logs -f` e pare o serviço com `docker compose -f docker-compose.prod.yml down`. O health check pode ser conferido com `docker compose -f docker-compose.prod.yml ps`.
 
-O contêiner não adiciona backend ou persistência: os usuários continuam em memória no navegador. Para desenvolvimento com recarga automática, use `npm start`. Docker é opcional para execução local e sua imagem é verificada pelo job `Container smoke test`.
+Para servir por um domínio com HTTPS, configure DNS e coloque um proxy reverso ou balanceador com TLS à frente do contêiner, encaminhando para a porta `HOST_PORT`. Domínio, certificado TLS, firewall e máquina de hospedagem são dados do ambiente real e ainda precisam ser configurados pelo responsável pelo servidor. A pipeline publica a imagem; não configura esses recursos nem faz deploy remoto.
 
 ## Roteiro para entender o projeto
 

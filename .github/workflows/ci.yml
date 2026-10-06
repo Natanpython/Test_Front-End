@@ -88,7 +88,7 @@ jobs:
       - name: Verify production server
         run: |
           docker run -d --name usuarios-ci -p 8080:8080 usuarios-app:ci
-          curl --fail --retry 15 --retry-connrefused --retry-delay 2 http://localhost:8080/health
+          curl --fail --max-time 5 --retry 15 --retry-all-errors --retry-delay 2 http://localhost:8080/health
           curl --fail http://localhost:8080/ | grep -q '<app-root>'
           curl --fail http://localhost:8080/rota-de-teste | grep -q '<app-root>'
       - name: Container logs and cleanup

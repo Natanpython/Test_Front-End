@@ -1,0 +1,19 @@
+{
+  "dialogsAfterTwoClicks": 2,
+  "phoneAccepted": {
+    "++11987654321": true,
+    "((11987654321": true,
+    "11987654321": true
+  },
+  "duplicateEmailMessage": "Já existe um usuário com este e-mail.",
+  "formPreservedAfterError": "Revisão",
+  "rowsAfterCancel": 3,
+  "horizontalOverflow": {
+    "320": false,
+    "390": false,
+    "1280": false,
+    "dialog-320": false,
+    "dialog-390": false,
+    "dialog-1280": false
+  }
+}

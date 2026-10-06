@@ -1,0 +1,96 @@
+<a class="skip-link" href="#main">Ir para o conteúdo</a>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">a.</span><span>USUÁRIOS</span>
+    </div>
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="10.8" cy="10.8" r="6.5" />
+        <path d="m16 16 4.5 4.5" />
+      </svg>
+      <label class="sr-only" for="search">Pesquisar usuários por nome</label>
+      <input
+        id="search"
+        type="search"
+        [formControl]="search"
+        placeholder="Pesquisar por nome…"
+        autocomplete="off"
+      />
+    </div>
+  </div>
+</header>
+<main id="main" tabindex="-1">
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">GESTÃO DE USUÁRIOS</p>
+      <h1>Usuários cadastrados</h1>
+      <p class="subtitle">Consulte e mantenha os dados da sua equipe.</p>
+    </div>
+    <span class="count"
+      >{{ store.users().length }} {{ store.users().length === 1 ? 'usuário' : 'usuários' }}</span
+    >
+  </div>
+  <section aria-label="Listagem de usuários" [attr.aria-busy]="store.loading()">
+    @if (store.loading()) {
+      <div class="state" role="status">
+        <mat-spinner diameter="32" aria-label="Carregando usuários" />
+        <p>Buscando usuários…</p>
+      </div>
+    } @else if (store.error()) {
+      <div class="state">
+        <p class="error" role="alert">{{ store.error() }}</p>
+        <button mat-stroked-button (click)="store.refresh()">Tentar novamente</button>
+      </div>
+    } @else if (store.users().length === 0) {
+      <div class="state" role="status">
+        <span class="empty-symbol" aria-hidden="true">⌕</span>
+        <h2>Nenhum usuário encontrado</h2>
+        <p>Tente outro nome ou cadastre um novo usuário.</p>
+        <button mat-stroked-button (click)="search.setValue('')">Limpar busca</button>
+      </div>
+    } @else {
+      <div class="list-labels" aria-hidden="true">
+        <span>Nome</span><span>E-mail</span><span>Ações</span>
+      </div>
+      <ul class="user-list">
+        @for (user of visibleUsers(); track user.id) {
+          <li class="user-card">
+            <div class="identity">
+              <span class="avatar" aria-hidden="true">{{ user.name.charAt(0).toUpperCase() }}</span
+              ><span class="name">{{ user.name }}</span>
+            </div>
+            <span class="email">{{ user.email }}</span>
+            <button
+              mat-icon-button
+              [attr.aria-label]="'Editar ' + user.name"
+              (click)="openUser(user)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15z" />
+              </svg>
+            </button>
+          </li>
+        }
+      </ul>
+      <div class="list-footer">
+        <span>Dados de demonstração</span
+        ><span>Os cadastros são reiniciados ao recarregar a página.</span>
+      </div>
+      @if (pageCount() > 1) {
+        <nav class="pagination" aria-label="Paginação de usuários">
+          <button mat-button [disabled]="currentPage() === 0" (click)="changePage(-1)">
+            Anterior
+          </button>
+          <span aria-live="polite">Página {{ currentPage() + 1 }} de {{ pageCount() }}</span>
+          <button mat-button [disabled]="currentPage() + 1 >= pageCount()" (click)="changePage(1)">
+            Próxima
+          </button>
+        </nav>
+      }
+    }
+  </section>
+  <button mat-fab class="add-user" aria-label="Adicionar novo usuário" (click)="openUser()">
+    <span aria-hidden="true">+</span>
+  </button>
+</main>

@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Validate pull request commits and title
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          npx --no-install commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
+          printf '%s\n' "$PR_TITLE" | npx --no-install commitlint
+      - name: Validate pushed commit
+        if: github.event_name == 'push'
+        run: git log -1 --format=%B | npx --no-install commitlint
+      - run: npm run format:check
+      - run: npm run test:coverage
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/usuarios-app/
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-build
+          path: dist/usuarios-app/browser/
+          if-no-files-found: error
+          retention-days: 7
+
+  e2e:
+    name: Browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  container:
+    name: Container smoke test
+    needs: [quality, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - run: docker build -t usuarios-app:ci .
+      - name: Verify production server
+        run: |
+          docker run -d --name usuarios-ci -p 8080:8080 usuarios-app:ci
+          curl --fail --retry 15 --retry-connrefused --retry-delay 2 http://localhost:8080/health
+          curl --fail http://localhost:8080/ | grep -q '<app-root>'
+          curl --fail http://localhost:8080/rota-de-teste | grep -q '<app-root>'
+      - name: Container logs and cleanup
+        if: always()
+        run: |
+          docker logs usuarios-ci || true
+          docker rm -f usuarios-ci || true

@@ -8,8 +8,10 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "test:coverage": "ng test --watch=false --coverage",
-    "format": "prettier --write src e2e playwright.config.ts README.md angular.json package.json",
-    "test:e2e": "playwright test"
+    "format": "prettier --write src e2e .github *.md *.json *.ts *.cjs",
+    "test:e2e": "playwright test",
+    "format:check": "prettier --check src e2e .github *.md *.json *.ts *.cjs",
+    "commitlint": "commitlint"
   },
   "private": true,
   "packageManager": "npm@11.9.0",
@@ -29,6 +31,8 @@
     "@angular/build": "^21.2.25",
     "@angular/cli": "^21.2.25",
     "@angular/compiler-cli": "^21.2.0",
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
     "@playwright/test": "^1.63.0",
     "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^28.0.0",

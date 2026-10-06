@@ -6,13 +6,16 @@ Aplicação de listagem, cadastro e edição de usuários, baseada no protótipo
 
 Pré-requisitos: Node.js 24 LTS e npm. Ambiente validado com Node 24.14.0 e npm 11.9.0.
 
-Todos os comandos devem ser executados na pasta que contém este README e o `package.json`. Se o terminal estiver na pasta pai (`teste tecnico`), entre primeiro no projeto:
+Clone o repositório e entre na raiz do projeto:
 
 ```bash
-cd usuarios-app
+git clone https://github.com/Natanpython/Test_Front-End.git
+cd Test_Front-End
 ```
 
-Se já estiver em `usuarios-app`, não repita o `cd`. Instale as dependências e inicie a aplicação:
+O `package.json`, este README e a pasta `src` ficam diretamente nessa raiz. Não há uma subpasta `usuarios-app` para acessar no repositório clonado. Se já estiver na pasta que contém o `package.json`, execute os comandos a partir dela, independentemente do nome da sua pasta local.
+
+Instale as dependências e inicie a aplicação:
 
 ```bash
 npm ci
@@ -145,6 +148,50 @@ Não é necessário executar `npm start` antes dos E2E. A configuração usa `ht
 - **4 testes E2E aprovados** com Edge, cobrindo os cenários de desktop e celular.
 
 Esses números registram a versão verificada; a saída dos comandos mostra o resultado da execução no ambiente do avaliador.
+
+## Integração contínua — GitHub Actions
+
+O workflow [CI](.github/workflows/ci.yml) roda em pushes, pull requests e execução manual. Todos os comandos usam a raiz do repositório, sem `working-directory` adicional.
+
+| Job                    | Verificação                                                                                                       |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `Quality`              | Instalação com `npm ci`, Conventional Commits, formatação, testes com cobertura mínima de 65% e build de produção |
+| `Browser tests`        | Instala Chromium e dependências de sistema e executa os E2E de desktop e celular                                  |
+| `Container smoke test` | Após os outros jobs passarem, constrói a imagem Docker e verifica HTTP, health check e fallback da aplicação      |
+
+O pipeline usa Node conforme `.nvmrc`, cache de downloads npm, permissões de leitura e cancelamento de execuções antigas da mesma branch/PR. Relatórios de cobertura, resultados do Playwright e build ficam disponíveis como artifacts por sete dias. O Dependabot propõe atualizações de npm, Actions e imagens Docker.
+
+No CI, o Chromium é instalado explicitamente; não depende do Edge da máquina do avaliador. Essa configuração segue a [orientação de CI do Playwright](https://playwright.dev/docs/ci).
+
+Esta estrutura implementa CI e disponibiliza o build como artefato. **Não há deploy automático nem publicação de imagem em registry**: não foi definido um ambiente de hospedagem. Acompanhe as execuções na [aba Actions](https://github.com/Natanpython/Test_Front-End/actions).
+
+## Padrão de commits e contribuição
+
+Use Conventional Commits, por exemplo `fix(form): valida pontuação do telefone` ou `ci(actions): adiciona pipeline de qualidade`. O Commitlint verifica os commits novos e o título nos PRs; em pushes, verifica o último commit. Consulte [CONTRIBUTING.md](CONTRIBUTING.md) para comandos, fluxo de contribuição e instruções de proteção da branch.
+
+```bash
+npm run format:check
+npm run commitlint -- --last --verbose
+```
+
+O primeiro commit histórico precede a adoção dessa convenção. A proteção de `master` com checks obrigatórios depende de configuração administrativa no GitHub; não é ativada apenas pelos arquivos do pipeline.
+
+## Docker — execução opcional de produção
+
+Docker permite avaliar o build de produção sem instalar Node no computador. É necessário ter Docker Engine ou Docker Desktop ativo, com suporte a contêineres Linux.
+
+Na raiz do repositório:
+
+```bash
+docker build -t usuarios-app:local .
+docker run --rm --name usuarios-app -p 8080:8080 usuarios-app:local
+```
+
+Acesse http://localhost:8080. Para parar, use `Ctrl+C` no terminal do contêiner ou `docker stop usuarios-app` em outro terminal.
+
+O [Dockerfile](Dockerfile) usa dois estágios: Node compila o Angular e Nginx sem privilégios de root serve apenas os arquivos gerados na porta 8080. O servidor inclui `/health` e fallback para `index.html`. Esse uso de estágios separa as ferramentas de compilação da imagem final, conforme a [documentação Docker](https://docs.docker.com/build/building/multi-stage/).
+
+O contêiner não adiciona backend ou persistência: os usuários continuam em memória no navegador. Para desenvolvimento com recarga automática, use `npm start`. Docker é opcional para execução local e sua imagem é verificada pelo job `Container smoke test`.
 
 ## Roteiro para entender o projeto
 
